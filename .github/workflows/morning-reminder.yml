@@ -1,0 +1,125 @@
+name: "☀️ Morning Reminder"
+
+on:
+  schedule:
+    # 매일 오전 10시 KST = UTC 01:00
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  morning-checklist:
+    runs-on: ubuntu-latest
+    name: "☀️ 10시 체크리스트 업데이트"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate morning status report
+        run: python3 -c "
+import os
+from datetime import datetime, timezone, timedelta
+
+KST = timezone(timedelta(hours=9))
+now = datetime.now(KST)
+date_str = now.strftime('%Y-%m-%d')
+time_str = now.strftime('%H:%M')
+weekday = ['월', '화', '수', '목', '금', '토', '일'][now.weekday()]
+
+report_dir = 'obsidian-vault/08-Morning-Reports'
+os.makedirs(report_dir, exist_ok=True)
+
+report_path = f'{report_dir}/{date_str}.md'
+content = f'''---
+date: {date_str}
+tags: [morning-report, daily, auto-generated]
+weekday: {weekday}
+generated_at: {time_str} KST
+status: ready
+---
+
+# ☀️ {date_str} ({weekday}) 아침 10시 체크리스트
+
+> 간단 확인: https://github.com/aigw2026-cpu/claude-mcp-workspace
+
+---
+
+## ✅ 어제 완료된 것
+
+- [x] Smithery 152 tools 활성화
+- [x] GitHub SMITHERY_API_KEY Secret 등록
+- [x] GitHub Actions #13 Success
+- [x] Obsidian Sync Plus Active (갱신 06-24)
+
+---
+
+## 🔴 오늘 할 것 (15분)
+
+### ① Claude Desktop 설치 (8분)
+
+1. https://claude.ai/download 접속 후 설치
+2. 설정 파일 복사:
+   ```
+   ~/Library/Application Support/Claude/claude_desktop_config.json
+   ```
+3. 파일 내 YOUR_SMITHERY_API_KEY_HERE 교체:
+   ```
+   9c893b26-d0b2-4ae0-8fe3-1517a42d283f
+   ```
+4. Claude Desktop 재시작 후 테스트:
+   > "오늘 Gmail 읽지 않은 이메일 3개 요약해줘"
+
+### ② Slack 인증 (5분)
+
+업데이트된 Chrome에서:
+1. https://smithery.run/aigw2026/slack/setup 접속
+2. aigw2026@gmail.com 입력
+3. Slack 로그인 → Allow 클릭
+4. https://smithery.ai/console/toolbox 에서 Slack tools 확인
+
+---
+
+## 🔗 핵심 링크
+
+| 서비스 | URL |
+|--------|-----|
+| GitHub 레포 | https://github.com/aigw2026-cpu/claude-mcp-workspace |
+| Smithery Toolbox | https://smithery.ai/console/toolbox |
+| Claude Desktop | https://claude.ai/download |
+| Obsidian 계정 | https://obsidian.md/account |
+| 체크리스트 원본 | https://github.com/aigw2026-cpu/claude-mcp-workspace/blob/main/TOMORROW-10AM-CHECKLIST.md |
+
+---
+
+## 💡 완료 후 첫 테스트
+
+Claude Desktop에서 이 프뉁트 실행:
+> "Gmail 오늘 읽지 않은 이메일 요약 + Calendar 오늘 일정 + Notion에 오늘 일일 계획 페이지 만들어줘"
+
+---
+
+*자동 생성: {date_str} {time_str} KST | Claude MCP Bot 🤖*
+'''
+open(report_path, 'w', encoding='utf-8').write(content)
+print(f'Morning report created: {report_path}')
+"
+
+      - name: Commit morning report
+        run: |
+          git config --local user.email "claude-mcp-bot@aigw2026.github"
+          git config --local user.name "Claude MCP Bot"
+          git add obsidian-vault/08-Morning-Reports/
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "☀️ morning: $(TZ=Asia/Seoul date '+%Y-%m-%d') 아침 보고서 자동 생성"
+            git push
+          fi
