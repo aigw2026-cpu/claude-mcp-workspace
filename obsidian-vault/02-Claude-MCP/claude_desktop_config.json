@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "smithery-toolbox": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@smithery/toolbox",
+        "--key",
+        "YOUR_SMITHERY_API_KEY_HERE"
+      ],
+      "env": {
+        "SMITHERY_PROFILE": "aigw2026"
+      }
+    }
+  }
+}
