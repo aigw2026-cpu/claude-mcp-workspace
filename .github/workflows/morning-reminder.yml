@@ -10,6 +10,8 @@ jobs:
   morning-checklist:
     runs-on: ubuntu-latest
     name: Morning 10AM Checklist
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
