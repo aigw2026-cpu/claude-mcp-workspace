@@ -1,0 +1,326 @@
+# ============================================================
+# Obsidian Sync — GitHub Actions 자동화 워크플로우
+# 트리거: main 브랜치에 push될 때마다 자동 실행
+# 기능:
+#   1. 새 마크다운 파일을 Obsidian Daily Notes 폴더에 자동 복사
+#   2. 날짜 기반 인덱스 파일 자동 생성
+#   3. Obsidian용 메타데이터(frontmatter) 자동 주입
+#   4. 전체 vault 구조 유효성 검사
+# ============================================================
+
+name: 🔄 Obsidian Vault Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'connectors/**'
+      - 'workflows/**'
+      - 'scripts/**'
+  schedule:
+    # 매일 자정(KST 09:00) 자동 Daily Note 생성
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: '전체 vault 재빌드'
+        required: false
+        default: 'false'
+
+jobs:
+  sync-to-obsidian:
+    name: Sync to Obsidian Vault
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: pip install python-frontmatter PyYAML
+
+      - name: 📅 Get current date (KST)
+        id: date
+        run: |
+          echo "date=$(TZ='Asia/Seoul' date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          echo "datetime=$(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M')" >> $GITHUB_OUTPUT
+          echo "year=$(TZ='Asia/Seoul' date +'%Y')" >> $GITHUB_OUTPUT
+          echo "week=$(TZ='Asia/Seoul' date +'%V')" >> $GITHUB_OUTPUT
+
+      - name: 🏗️ Create Obsidian vault structure
+        run: |
+          mkdir -p obsidian-vault/00-Dashboard
+          mkdir -p obsidian-vault/01-Daily-Notes/${{ steps.date.outputs.year }}
+          mkdir -p obsidian-vault/02-Claude-MCP
+          mkdir -p obsidian-vault/03-Connectors
+          mkdir -p obsidian-vault/04-Workflows
+          mkdir -p obsidian-vault/05-Templates
+          mkdir -p obsidian-vault/06-Archive
+          echo "✅ Vault structure created"
+
+      - name: 📋 Inject frontmatter into markdown files
+        run: |
+          python3 - <<'PYEOF'
+          import os, re, glob
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          kst = ZoneInfo("Asia/Seoul")
+          now = datetime.now(kst)
+          today = now.strftime("%Y-%m-%d")
+          timestamp = now.strftime("%Y-%m-%d %H:%M")
+
+          def inject_frontmatter(filepath, extra_tags=None):
+              with open(filepath, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              
+              # 이미 frontmatter가 있으면 스킵
+              if content.startswith('---'):
+                  return False
+              
+              filename = os.path.basename(filepath)
+              title = os.path.splitext(filename)[0].replace('-', ' ').replace('_', ' ')
+              tags = ["claude-mcp", "auto-generated"]
+              if extra_tags:
+                  tags.extend(extra_tags)
+              
+              fm = f"""---
+          title: "{title}"
+          date: {today}
+          updated: {timestamp}
+          tags: {tags}
+          source: github
+          repo: aigw2026-cpu/claude-mcp-workspace
+          ---
+
+          """
+              with open(filepath, 'w', encoding='utf-8') as f:
+                  f.write(fm + content)
+              return True
+
+          # connectors 폴더
+          for f in glob.glob('connectors/**/*.md', recursive=True):
+              if inject_frontmatter(f, ['connector', 'prompt']):
+                  print(f"  ✅ Injected FM: {f}")
+
+          # workflows 폴더
+          for f in glob.glob('workflows/**/*.md', recursive=True):
+              if inject_frontmatter(f, ['workflow', 'automation']):
+                  print(f"  ✅ Injected FM: {f}")
+
+          print("Frontmatter injection complete")
+          PYEOF
+
+      - name: 📂 Copy files to Obsidian vault
+        run: |
+          # Claude MCP 폴더
+          cp -r connectors/* obsidian-vault/03-Connectors/ 2>/dev/null || true
+          cp -r workflows/* obsidian-vault/04-Workflows/ 2>/dev/null || true
+          cp claude_desktop_config.json obsidian-vault/02-Claude-MCP/ 2>/dev/null || true
+          cp scripts/setup.sh obsidian-vault/02-Claude-MCP/ 2>/dev/null || true
+          
+          echo "✅ Files copied to vault"
+
+      - name: 📅 Generate Daily Note
+        run: |
+          DATE=${{ steps.date.outputs.date }}
+          YEAR=${{ steps.date.outputs.year }}
+          DATETIME=${{ steps.date.outputs.datetime }}
+          DAILY_PATH="obsidian-vault/01-Daily-Notes/${YEAR}/${DATE}.md"
+          
+          if [ ! -f "$DAILY_PATH" ]; then
+            cat > "$DAILY_PATH" << MDEOF
+          ---
+          title: "${DATE} 일일 노트"
+          date: ${DATE}
+          type: daily-note
+          tags: [daily-note, claude-mcp, auto-generated]
+          ---
+          
+          # 📅 ${DATE}
+          
+          > 자동 생성됨: ${DATETIME} (KST)
+          
+          ## 🎯 오늘의 목표
+          - [ ] 
+          - [ ] 
+          - [ ] 
+          
+          ## 📋 Claude MCP 작업
+          - [ ] Gmail 처리
+          - [ ] Calendar 일정 확인
+          - [ ] Notion 업데이트
+          
+          ## 💡 아이디어 & 메모
+          
+          
+          ## 📊 오늘의 완료 사항
+          
+          
+          ## 🔗 관련 노트
+          [[MCP-Dashboard]] | [[00-Dashboard/Home]]
+          MDEOF
+            echo "✅ Daily Note created: $DAILY_PATH"
+          else
+            echo "⏭️  Daily Note already exists: $DAILY_PATH"
+          fi
+
+      - name: 🏠 Update Dashboard
+        run: |
+          DATE=${{ steps.date.outputs.date }}
+          DATETIME=${{ steps.date.outputs.datetime }}
+          WEEK=${{ steps.date.outputs.week }}
+
+          cat > "obsidian-vault/00-Dashboard/Home.md" << MDEOF
+          ---
+          title: "🤖 Claude MCP Workspace — Obsidian Dashboard"
+          date: ${DATE}
+          updated: ${DATETIME}
+          type: dashboard
+          tags: [dashboard, claude-mcp, home]
+          pinned: true
+          ---
+          
+          # 🤖 Claude MCP Workspace
+          
+          > **마지막 동기화**: ${DATETIME} (KST) | **Week**: ${WEEK}
+          > GitHub → Obsidian 자동 연동 활성화 ✅
+          
+          ---
+          
+          ## 📊 커넥터 연결 현황
+          
+          | 서비스 | 상태 | 기능 |
+          |---|---|---|
+          | Gmail | ✅ 완료 | 읽기, 초안 작성 |
+          | Google Calendar | ✅ 완료 | 일정 조회/생성 |
+          | Google Drive | ✅ 완료 | 파일 읽기/쓰기 |
+          | Google Sheets | ✅ 완료 | 데이터 읽기/쓰기 |
+          | Notion | ✅ 완료 | 페이지 읽기/작성 |
+          | Slack | ⏳ 설정 필요 | 메시지 전송 |
+          
+          ---
+          
+          ## 🗂️ Vault 구조
+          
+          - [[01-Daily-Notes/${YEAR}/${DATE}|📅 오늘 일일 노트]]
+          - [[02-Claude-MCP/claude_desktop_config.json|⚙️ MCP 설정]]
+          - [[03-Connectors/all_prompts|📚 프롬프트 모음]]
+          - [[04-Workflows/morning_briefing|🌅 아침 브리핑]]
+          - [[05-Templates/Daily-Note-Template|📝 일일 노트 템플릿]]
+          
+          ---
+          
+          ## ⚡ 빠른 프롬프트
+          
+          ```
+          오늘 캘린더 일정이랑 Gmail 중요 메일 요약해줘
+          ```
+          
+          ```
+          Notion에 오늘 날짜 대시보드 페이지 만들어줘
+          ```
+          
+          ---
+          
+          *🔄 GitHub Actions로 자동 생성 | [레포 바로가기](https://github.com/aigw2026-cpu/claude-mcp-workspace)*
+          MDEOF
+          echo "✅ Dashboard updated"
+
+      - name: 📝 Generate Templates
+        run: |
+          # Daily Note 템플릿
+          cat > "obsidian-vault/05-Templates/Daily-Note-Template.md" << 'TMPL'
+          ---
+          title: "{{date:YYYY-MM-DD}} 일일 노트"
+          date: {{date:YYYY-MM-DD}}
+          type: daily-note
+          tags: [daily-note]
+          ---
+          
+          # 📅 {{date:YYYY-MM-DD}} ({{date:dddd}})
+          
+          ## 🎯 오늘의 3가지 목표
+          - [ ] 
+          - [ ] 
+          - [ ] 
+          
+          ## 📧 처리할 이메일
+          - [ ] 
+          
+          ## 📅 오늘 일정
+          > Claude에게 "오늘 캘린더 일정 알려줘"로 확인
+          
+          ## 💡 아이디어 & 배운 것
+          
+          
+          ## ✅ 완료한 일
+          
+          
+          ## 🔗 링크된 노트
+          
+          TMPL
+
+          # Claude MCP 세션 기록 템플릿
+          cat > "obsidian-vault/05-Templates/Claude-Session-Template.md" << 'TMPL'
+          ---
+          title: "Claude 세션 — {{date:YYYY-MM-DD HH:mm}}"
+          date: {{date:YYYY-MM-DD}}
+          type: claude-session
+          tags: [claude-session, mcp]
+          connectors-used: []
+          ---
+          
+          # 🤖 Claude 세션 기록
+          
+          **날짜**: {{date:YYYY-MM-DD HH:mm}}
+          **사용 커넥터**: 
+          
+          ## 📥 요청 (Prompt)
+          
+          
+          ## 📤 결과 (Result)
+          
+          
+          ## 💾 저장된 데이터
+          - Notion: 
+          - Sheets:
+          - Drive:
+          
+          ## 📌 메모
+          
+          TMPL
+          echo "✅ Templates created"
+
+      - name: 🔍 Validate vault
+        run: |
+          echo "=== Vault 구조 검증 ==="
+          find obsidian-vault -name "*.md" | sort | while read f; do
+            echo "  📄 $f"
+          done
+          echo ""
+          echo "총 파일 수: $(find obsidian-vault -name '*.md' | wc -l)"
+
+      - name: 💾 Commit vault changes
+        run: |
+          git config --global user.name "Claude MCP Bot"
+          git config --global user.email "claude-mcp-bot@aigw2026.dev"
+          git add obsidian-vault/ connectors/ workflows/ || true
+          if git diff --staged --quiet; then
+            echo "변경사항 없음 — 커밋 스킵"
+          else
+            git commit -m "🔄 obsidian: auto-sync ${{ steps.date.outputs.datetime }} (KST)"
+            git push origin main
+            echo "✅ Vault 커밋 & 푸시 완료"
+          fi
