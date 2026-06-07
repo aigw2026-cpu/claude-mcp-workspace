@@ -1,7 +1,7 @@
 ---
 title: "Claude MCP Workspace Dashboard"
 date: 2026-06-07
-updated: 2026-06-07 15:49
+updated: 2026-06-07 22:43
 type: dashboard
 tags:
   - dashboard
@@ -12,7 +12,7 @@ pinned: true
 
 # 🤖 Claude MCP Workspace
 
-> **마지막 동기화**: 2026-06-07 15:49 (KST)
+> **마지막 동기화**: 2026-06-07 22:43 (KST)
 > GitHub Actions 자동 연동 ✅
 
 ---
