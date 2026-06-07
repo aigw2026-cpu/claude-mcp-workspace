@@ -18,27 +18,21 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Generate morning report
-        run: python3 -c "
-import os
-from datetime import datetime, timezone, timedelta
-KST = timezone(timedelta(hours=9))
-now = datetime.now(KST)
-date_str = now.strftime('%Y-%m-%d')
-time_str = now.strftime('%H:%M')
-report_dir = 'obsidian-vault/08-Morning-Reports'
-os.makedirs(report_dir, exist_ok=True)
-report_path = f'{report_dir}/{date_str}.md'
-src = 'TOMORROW-10AM-CHECKLIST.md'
-c = open(src).read() if os.path.exists(src) else f'# {date_str} Morning Checklist - see github.com/aigw2026-cpu/claude-mcp-workspace'
-open(report_path, 'w', encoding='utf-8').write(c)
-print('Done: ' + report_path)
-"
+        run: |
+          mkdir -p obsidian-vault/08-Morning-Reports
+          DATE=$(TZ=Asia/Seoul date '+%Y-%m-%d')
+          REPORT="obsidian-vault/08-Morning-Reports/$DATE.md"
+          if [ ! -f "$REPORT" ]; then
+            if [ -f "TOMORROW-10AM-CHECKLIST.md" ]; then
+              cp TOMORROW-10AM-CHECKLIST.md "$REPORT"
+            else
+              printf '# %s Morning Checklist\nSee: https://github.com/aigw2026-cpu/claude-mcp-workspace/blob/main/TOMORROW-10AM-CHECKLIST.md\n' "$DATE" > "$REPORT"
+            fi
+            echo "Created: $REPORT"
+          else
+            echo "Already exists: $REPORT"
+          fi
 
       - name: Commit report
         run: |
@@ -48,6 +42,7 @@ print('Done: ' + report_path)
           if git diff --staged --quiet; then
             echo "No changes"
           else
-            git commit -m "morning: daily checklist $(TZ=Asia/Seoul date '+%Y-%m-%d')"
+            DATE=$(TZ=Asia/Seoul date '+%Y-%m-%d')
+            git commit -m "morning: daily checklist $DATE"
             git push
           fi
