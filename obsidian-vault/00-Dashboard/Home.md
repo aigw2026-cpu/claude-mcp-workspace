@@ -1,7 +1,7 @@
 ---
 title: "Claude MCP Workspace Dashboard"
-date: 2026-06-19
-updated: 2026-06-19 12:43
+date: 2026-06-20
+updated: 2026-06-20 11:47
 type: dashboard
 tags:
   - dashboard
@@ -12,7 +12,7 @@ pinned: true
 
 # 🤖 Claude MCP Workspace
 
-> **마지막 동기화**: 2026-06-19 12:43 (KST)
+> **마지막 동기화**: 2026-06-20 11:47 (KST)
 > GitHub Actions 자동 연동 ✅
 
 ---
@@ -32,7 +32,7 @@ pinned: true
 
 ## 🗂️ Vault 구조
 
-- [[01-Daily-Notes/2026/2026-06-19|📅 오늘 일일 노트]]
+- [[01-Daily-Notes/2026/2026-06-20|📅 오늘 일일 노트]]
 - [[02-Claude-MCP/MCP-Setup-Guide|⚙️ MCP 설정 가이드]]
 - [[03-Connectors/all_prompts|📚 프롬프트 모음]]
 - [[04-Workflows/morning_briefing|🌅 아침 브리핑]]
